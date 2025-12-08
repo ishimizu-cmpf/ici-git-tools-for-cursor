@@ -106,7 +106,7 @@ br_history() {
 
     echo "$display_count => $br_date $br_name$deleted_marker"
     ((display_count++))
-  done | less -X
+  done
 }
 
 alias gbh='br_history'
