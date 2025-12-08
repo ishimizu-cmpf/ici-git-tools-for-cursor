@@ -1,0 +1,103 @@
+alias br_name="git symbolic-ref --short HEAD 2>/dev/null"
+alias is_git_dir='git rev-parse 2> /dev/null'
+
+br_exists_on_remote() {
+  local branch="$1"
+  git branch -r | grep -q "origin/${branch}"
+}
+
+
+br_history() {
+  if ! is_git_dir; then
+    echo "not a git directory"
+    return 1
+  fi
+
+  local br_index=$1
+  local current_branch=$(br_name)
+  typeset -A seen_branches
+  local branch_list=()
+  local branch_dates=()
+  local count=0
+  local max_display=20
+  # 必要な分だけ読み込む（表示件数の5倍程度、重複を考慮）
+  local max_read=$((max_display * 5))
+
+  # Git reflogからブランチ移動履歴を取得
+  # 形式: "HEAD@{2025-08-18 13:42:57} checkout: moving from master to feature/xxx"
+  # 
+  # プロセス置換 < <(...) を使用:
+  # - whileループは現在のシェルで実行され、変数の変更が正しく反映される
+  while IFS= read -r line; do
+    # 必要な件数に達したら早期終了
+    [[ $count -ge $max_display ]] && break
+    [[ -z "$line" ]] && continue
+
+    # reflogの行をパース（sedで抽出）
+    # 例: "HEAD@{2025-08-18 13:42:57} checkout: moving from master to feature/xxx"
+    local entry_date=$(echo "$line" | sed -E 's/^HEAD@\{([0-9-]+ [0-9:]+)\} .*/\1/')
+    local message=$(echo "$line" | sed -E 's/^HEAD@\{[^}]+\} (.*)/\1/')
+
+    # "checkout: moving from A to B" の形式からブランチ名を抽出
+    if [[ "$message" =~ "checkout: moving from" ]]; then
+      local target_branch=$(echo "$message" | sed -E 's/.*checkout: moving from [^ ]+ to ([^ ]+).*/\1/')
+
+      # 有効なブランチ名かチェック（HEAD、master、コミットハッシュを除外）
+      if [[ -n "$target_branch" && "$target_branch" != "HEAD" && "$target_branch" != "master" && ! "$target_branch" =~ ^[0-9a-f]{7,40}$ ]]; then
+        # 連想配列で重複チェック（O(1)）
+        if [[ -z "${seen_branches[$target_branch]}" ]]; then
+          branch_list+=("$target_branch")
+          branch_dates+=("$entry_date")
+          seen_branches[$target_branch]=1
+          ((count++))
+        fi
+      fi
+    fi
+  # プロセス置換: git reflog の結果をwhileループに渡す
+  # この方法により、whileループ内での変数変更（branch_list、countなど）が親シェルに反映される
+  done <<(git reflog -n $max_read --date=format:'%Y-%m-%d %H:%M:%S' --format="%gd %gs" 2>/dev/null | grep "checkout: moving from")
+
+  # インデックス指定時は該当ブランチにチェックアウト
+  if [[ -n "$br_index" ]]; then
+    if [[ "$br_index" =~ ^[0-9]+$ ]] && [[ $br_index -ge 1 && $br_index -le ${#branch_list[@]} ]]; then
+      # 配列は新しいものから順（インデックス0が最新）
+      local array_index=$((br_index - 1))
+      local target_branch="${branch_list[$array_index]}"
+      if [[ -n "$target_branch" ]]; then
+        git checkout "$target_branch"
+      else
+        echo "Invalid branch index: $br_index"
+        return 1
+      fi
+    else
+      echo "Invalid index: $br_index (valid range: 1-${#branch_list[@]})"
+      return 1
+    fi
+    return
+  fi
+
+  # 履歴表示（historyコマンド風、最新が上）
+  echo "(current on $current_branch)"
+  
+  local display_count=1
+  for ((i=0; i<${#branch_list[@]}; i++)); do
+    local br_name="${branch_list[$i]}"
+    local br_date="${branch_dates[$i]}"
+    local deleted_marker=""
+    
+    # ブランチが削除されているかチェック
+    if ! br_exists_on_remote "$br_name" 2>/dev/null; then
+      deleted_marker=" (deleted)"
+    fi
+
+    # 現在のブランチにはマークを付ける
+    if [[ "$br_name" == "$current_branch" ]]; then
+      echo -n "* "
+    fi
+
+    echo "$display_count => $br_date $br_name$deleted_marker"
+    ((display_count++))
+  done | less -X
+}
+
+alias gh='br_history'
