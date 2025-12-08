@@ -10,12 +10,12 @@ br_exists_on_remote() {
 # 使用方法:
 #   br_history          - Git reflogからブランチ移動履歴を表示（最新20件）
 #   br_history <index>  - 指定したインデックスのブランチにチェックアウト
-#   gh                  - br_historyのエイリアス（同じ機能）
+#   gbh                 - br_historyのエイリアス（同じ機能）
 #
 # 例:
 #   br_history          # 履歴を表示
 #   br_history 3        # 3番目のブランチにチェックアウト
-#   gh                  # 履歴を表示（エイリアス使用）
+#   gbh                 # 履歴を表示（エイリアス使用）
 br_history() {
   if ! is_git_dir; then
     echo "not a git directory"
@@ -109,4 +109,4 @@ br_history() {
   done | less -X
 }
 
-alias gh='br_history'
+alias gbh='br_history'
