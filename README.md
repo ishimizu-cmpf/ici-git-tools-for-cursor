@@ -1,10 +1,14 @@
 # ichi-git-tools
 
+**注意: このツールはzsh専用です。bashでは動作しません。**
+
 ## セットアップ
+
+**zsh専用**: このスクリプトはzshの機能（プロセス置換 `<<(...)` や連想配列 `typeset -A`）を使用しているため、zshでのみ動作します。
 
 `.zshenv`などに以下のように記述することで、`gh`コマンドが使えるようになります。
 
-```bash
+```zsh
 source /path/to/.git_br_history.sh
 ```
 
@@ -18,7 +22,7 @@ source /path/to/.git_br_history.sh
 
 ### 例
 
-```bash
+```zsh
 gh          # 履歴を表示
 gh 3        # 3番目のブランチにチェックアウト
 ```
