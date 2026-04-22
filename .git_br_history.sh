@@ -13,11 +13,13 @@ br_exists_on_remote() {
 #
 # 統合ターミナルで CURSOR_* / VSCODE_IPC_HOOK が付かないことがある。そのときは PPID 列を辿って
 # Cursor.app / Visual Studio Code.app / Linux の code・cursor バイナリパスを見る。
+# $1 に「呼び出しシェルの PPID」を渡すこと。コマンド置換のサブシェル内では $PPID がサブシェルの親
+# （対話シェル自身）になり、辿り始めが一段ずれるため。
 _br_history_process_tree_scheme() {
   local pid line lc i next
-  pid=${PPID:-0}
+  pid="${1:-${PPID:-0}}"
   i=0
-  while [[ "${pid:-0}" -gt 1 && i -lt 24 ]]; do
+  while [[ "${pid:-0}" -gt 1 ]] && (( i < 24 )); do
     line=$(ps -p "$pid" -o args= 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
     if [[ -z "$line" ]]; then
       line=$(ps -p "$pid" -o command= 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
@@ -67,8 +69,9 @@ _br_history_uri_scheme() {
       return
     fi
   fi
-  local _tree
-  if _tree=$(_br_history_process_tree_scheme); then
+  local _tree _ppid
+  _ppid=${PPID:-0}
+  if _tree=$(_br_history_process_tree_scheme "$_ppid"); then
     printf '%s' "$_tree"
     return
   fi
