@@ -6,6 +6,34 @@ br_exists_on_remote() {
   git branch -r | grep -q "origin/${branch}"
 }
 
+# ターミナルでブランチ名に OSC8 リンク（cmd+クリックで gbh N）。要: ~/ichi-git-tools/vscode-br-history-uri-handler/install.sh
+# BR_HISTORY_URI_SCHEME=vscode（純 VS Code）/ BR_HISTORY_NO_TERMINAL_LINKS=1 / BR_HISTORY_FORCE_TERMINAL_LINKS=1
+# リンクが出ない: settings の terminal.integrated.allowedLinkSchemes に cursor（または vscode）を追加
+_br_history_print_branch_link() {
+  local n="$1"
+  local label="$2"
+
+  if [[ "${BR_HISTORY_NO_TERMINAL_LINKS:-}" == "1" ]]; then
+    printf '%s' "$label"
+    return
+  fi
+
+  local use_links=0
+  if [[ "${BR_HISTORY_FORCE_TERMINAL_LINKS:-}" == "1" ]]; then
+    use_links=1
+  elif [[ -t 1 && "${TERM_PROGRAM:-}" == "vscode" ]]; then
+    use_links=1
+  fi
+
+  if [[ "$use_links" != "1" ]]; then
+    printf '%s' "$label"
+    return
+  fi
+
+  local scheme="${BR_HISTORY_URI_SCHEME:-cursor}"
+  printf '\033]8;;%s://local.terminal-link/gbh?n=%s\033\\%s\033]8;;\033\\' "$scheme" "$n" "$label"
+}
+
 
 # 使用方法:
 #   br_history          - Git reflogからブランチ移動履歴を表示（最新20件）
@@ -87,7 +115,7 @@ br_history() {
 
   # 履歴表示（historyコマンド風、最新が上）
   echo "(current on $current_branch)"
-  
+
   local display_count=1
   for ((i=0; i<${#branch_list[@]}; i++)); do
     local br_name="${branch_list[$i]}"
@@ -104,7 +132,9 @@ br_history() {
       echo -n "* "
     fi
 
-    echo "$display_count => $br_date $br_name$deleted_marker"
+    printf '%s => %s ' "$display_count" "$br_date"
+    _br_history_print_branch_link "$display_count" "$br_name"
+    printf '%s\n' "$deleted_marker"
     ((display_count++))
   done
 }
