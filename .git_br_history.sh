@@ -146,8 +146,8 @@ br_history() {
     if [[ "$message" =~ "checkout: moving from" ]]; then
       local target_branch=$(echo "$message" | sed -E 's/.*checkout: moving from [^ ]+ to ([^ ]+).*/\1/')
 
-      # 有効なブランチ名かチェック（HEAD、master、コミットハッシュを除外）
-      if [[ -n "$target_branch" && "$target_branch" != "HEAD" && "$target_branch" != "master" && ! "$target_branch" =~ ^[0-9a-f]{7,40}$ ]]; then
+      # 有効なブランチ名かチェック（HEAD、master、main、コミットハッシュを除外）
+      if [[ -n "$target_branch" && "$target_branch" != "HEAD" && "$target_branch" != "master" && "$target_branch" != "main" && ! "$target_branch" =~ ^[0-9a-f]{7,40}$ ]]; then
         # 連想配列で重複チェック（O(1)）
         if [[ -z "${seen_branches[$target_branch]}" ]]; then
           branch_list+=("$target_branch")
