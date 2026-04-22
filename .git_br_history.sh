@@ -6,7 +6,7 @@ br_exists_on_remote() {
   git branch -r | grep -q "origin/${branch}"
 }
 
-# ターミナルでブランチ名に OSC8 リンク（cmd+クリックで gbh N）。要: ~/ichi-git-tools/vscode-br-history-uri-handler/install.sh
+# ターミナルでブランチ名に OSC8 リンク（cmd+クリックで gbh N）。要: このリポジトリの vscode-br-history-uri-handler/install.sh を bash で実行。
 # BR_HISTORY_URI_SCHEME=vscode（純 VS Code）/ BR_HISTORY_NO_TERMINAL_LINKS=1 / BR_HISTORY_FORCE_TERMINAL_LINKS=1
 # リンクが出ない: settings の terminal.integrated.allowedLinkSchemes に cursor（または vscode）を追加
 _br_history_print_branch_link() {
@@ -129,7 +129,7 @@ br_history() {
 
     # 現在のブランチにはマークを付ける
     if [[ "$br_name" == "$current_branch" ]]; then
-      echo -n "* "
+      printf '%s' '* '
     fi
 
     printf '%s => %s ' "$display_count" "$br_date"

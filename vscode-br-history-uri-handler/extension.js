@@ -13,6 +13,16 @@ function activate(context) {
           if (!n || !/^\d+$/.test(n)) {
             return;
           }
+          if (vscode.workspace.getConfiguration("gbhTerminalLink").get("requireConfirmation", false)) {
+            const choice = await vscode.window.showInformationMessage(
+              `Run "gbh ${n}" in the integrated terminal?`,
+              { modal: true },
+              "Run",
+            );
+            if (choice !== "Run") {
+              return;
+            }
+          }
           await vscode.commands.executeCommand("workbench.action.terminal.sendSequence", {
             text: `gbh ${n}\r`,
           });

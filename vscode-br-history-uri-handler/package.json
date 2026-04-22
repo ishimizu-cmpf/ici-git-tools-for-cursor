@@ -3,7 +3,20 @@
   "publisher": "local",
   "version": "0.0.3",
   "engines": { "vscode": "^1.80.0" },
-  "activationEvents": ["onStartupFinished", "onUri:local.terminal-link"],
+  "activationEvents": ["onUri:local.terminal-link"],
   "main": "extension.js",
-  "contributes": {}
+  "contributes": {
+    "configuration": [
+      {
+        "title": "GBH terminal link",
+        "properties": {
+          "gbhTerminalLink.requireConfirmation": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, confirm before running gbh N in the integrated terminal (mitigates untrusted cursor:// or vscode:// URI opens)."
+          }
+        }
+      }
+    ]
+  }
 }
