@@ -7,6 +7,9 @@ _ichi_git_tools_root=${${(%):-%x}:A:h:h}
 source "$_ichi_git_tools_root/.git_br_history.sh"
 unset _ichi_git_tools_root
 
+# gci: set_nodenv 前の .node-version スナップ（restore はこのコピーへ戻し、意図しない上書きを減らす）
+IGI__nodenv_saved=""
+
 # is_git_dir は .git_br_history.sh の alias（git rev-parse）
 _igi_require_git_dir() {
   if ! is_git_dir 2>/dev/null; then
@@ -124,10 +127,20 @@ br_parent() {
 
 br_name_by_issue() {
   local ISSUE_NO=$1
+  local -a m
   if ! [[ "$ISSUE_NO" =~ ^[0-9]+$ ]]; then
     return 1
   fi
-  git branch | grep "$ISSUE_NO" | sed -e 's/* //' -e 's/ //'
+  m=(${(f)"$(git branch --format='%(refname:short)' 2>/dev/null | command grep -F -- "$ISSUE_NO" 2>/dev/null)"})
+  if (( ${#m[@]} == 0 )); then
+    echo "gcb: no local branch name contains: $ISSUE_NO" >&2
+    return 1
+  fi
+  if (( ${#m[@]} > 1 )); then
+    echo "gcb: multiple branches match; specify branch name instead of issue number: ${m[*]}" >&2
+    return 1
+  fi
+  print -r -- "$m[1]"
 }
 
 gco_remote() {
@@ -199,9 +212,9 @@ gcb() {
   if br_exists "$BR_NAME"; then
     echo_execute "git checkout ${(q)BR_NAME}"
   elif br_exists_on_remote "$BR_NAME"; then
-    confirm_and_execute "Do you want to checkout $BR_NAME from remote?" "gco_remote $BR_NAME"
+    confirm_and_execute "Do you want to checkout $BR_NAME from remote?" "gco_remote ${(q)BR_NAME}"
   else
-    confirm_and_execute "Do you want to create new branch $BR_NAME?" "git checkout -b $BR_NAME"
+    confirm_and_execute "Do you want to create new branch $BR_NAME?" "git checkout -b ${(q)BR_NAME}"
   fi
 }
 
@@ -214,6 +227,12 @@ greset() {
 set_nodenv_file() {
   # .node-versionを20.18.2にする 未来的に数値が変わったり不要になる可能性あり
   [[ -f .node-version ]] || return 0
+  IGI__nodenv_saved=$(mktemp "${TMPDIR:-/tmp}/ichi-gci_nodever.XXXXXX") 2>/dev/null || { IGI__nodenv_saved=; return 0; }
+  if ! cp -p .node-version "$IGI__nodenv_saved" 2>/dev/null; then
+    rm -f "$IGI__nodenv_saved"
+    IGI__nodenv_saved=
+    return 0
+  fi
   if sed --version >/dev/null 2>&1; then
     sed -i 's/20.19.4/20.18.2/' .node-version
   else
@@ -222,7 +241,10 @@ set_nodenv_file() {
 }
 
 restore_nodenv_file() {
-  git checkout .node-version
+  if [[ -n $IGI__nodenv_saved && -f $IGI__nodenv_saved ]]; then
+    command mv -f -- "$IGI__nodenv_saved" .node-version
+  fi
+  IGI__nodenv_saved=
 }
 
 gci() {
@@ -239,10 +261,11 @@ gci() {
     return 1
   fi
   set_nodenv_file
-  tmp=$(mktemp "${TMPDIR:-/tmp}/ichi-gci.XXXXXX") || {
+  tmp=
+  if ! tmp=$(mktemp "${TMPDIR:-/tmp}/ichi-gci.XXXXXX") 2>/dev/null; then
     restore_nodenv_file
     return 1
-  }
+  fi
   print -r -- "$COMMIT_MESSAGE" >"$tmp" || {
     rm -f "$tmp"
     restore_nodenv_file
@@ -252,12 +275,13 @@ gci() {
   print -r -- "git commit -F $tmp"
   git commit -F "$tmp"
   ret=$?
-  rm -f "$tmp"
+  rm -f -- "$tmp" 2>/dev/null
   restore_nodenv_file
-  return ret
+  return $ret
 }
 
 gpush() {
+  local -a y_option
   zparseopts -D -E y=y_option
   _igi_require_git_dir || return
   local BR_NAME=${1:-$(br_name)}
@@ -265,7 +289,7 @@ gpush() {
     echo "$BR_NAME is not allowed to push directly"
     return 1
   fi
-  if [[ -n ${y_option:-} ]]; then
+  if (( $#y_option )); then
     echo_execute "git push -u origin ${(q)BR_NAME}:${(q)BR_NAME}"
   else
     confirm_and_execute "Are you sure you want to push $BR_NAME ?" "git push -u origin ${(q)BR_NAME}:${(q)BR_NAME}"
@@ -320,6 +344,10 @@ fi
 
 change_br_name() {
   local BR_NAME_SNAKE=$1 NEW_BR_NAME
+  if [[ -z $BR_NAME_SNAKE ]]; then
+    echo "usage: change_br_name <name_suffix>"
+    return 1
+  fi
   NEW_BR_NAME="$(issue_name_by_branch)_${BR_NAME_SNAKE}"
   confirm_and_execute "rename branch to $NEW_BR_NAME ?" "git branch -m ${(q)NEW_BR_NAME}"
 }
