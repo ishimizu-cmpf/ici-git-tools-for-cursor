@@ -6,13 +6,27 @@
 
 **zsh専用**: このスクリプトはzshの機能（プロセス置換 `<<(...)` や連想配列 `typeset -A`）を使用しているため、zshでのみ動作します。
 
-`.zshenv`などに以下のように記述することで、`gbh`コマンドが使えるようになります。
+### `gbh` / `br_history` だけ使う場合
+
+`.zshenv` などに次の1行を足します（リポジトリを置いたパスに合わせる）。
 
 ```zsh
-source /path/to/.git_br_history.sh
+source /path/to/ichi-git-tools/.git_br_history.sh
 ```
 
-これにより、`gbh`コマンドでブランチ履歴を確認・切り替えできるようになります。
+### zsh 用の git ユーティリティ一式（`gcb`・`gpush`・プロンプト表示など）
+
+`zsh/git.zsh` は、作者の `~/.zshenv` で使っている **`confirm_msg` / `confirm` / `echo_execute` / `confirm_and_execute` の4関数**を先に定義してから読み込む前提です。定義が既にある場合:
+
+```zsh
+source /path/to/ichi-git-tools/zsh/git.zsh
+```
+
+この1行で `.git_br_history.sh`（`gbh` 含む）もまとめて読み込みます。4関数をまだ持っていない場合は、同じファイル内に簡単な実装を置くか、`zsh/git.zsh` の先頭コメントを参考にしてください。
+
+**`change_br_name` 用 `issue_name_by_branch`**: `source` より**前**に同名関数を定義するとそれが使われます。未定義の場合は `zsh/git.zsh` 内のデフォルト（`parse_git_branch` を正規化した文字列）が使われます。
+
+**`gci`**: 標準の **`git commit -F`** でメッセージを渡します（グローバル alias の `git ci` には依存しません）。
 
 ### オプション: Cursor / VS Code のターミナルでブランチ名をクリックして checkout
 
