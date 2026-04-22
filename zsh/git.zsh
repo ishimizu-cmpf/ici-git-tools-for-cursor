@@ -19,7 +19,7 @@ alias ggrep='git grep -n --color=auto'
 alias dgrep='git ls-files | grep --color=auto'
 
 alias gpull='git pull'
-alias gp='git pull && git pull'
+alias gp='git pull'
 git_url() {
   local url
   url=$(git remote get-url origin 2>/dev/null) || return 1
@@ -69,16 +69,24 @@ display_on_ps1() {
   fi
 }
 
-# 現在時刻をつけてPS1に表示
-precmd() {
+# 現在時刻をつけてPS1に表示（他の precmd と合成するため add-zsh-hook を使う）
+autoload -Uz add-zsh-hook
+_ichi_git_tools_precmd_ps1() {
   PS1="[$(display_on_ps1) $(date "+%H:%M:%S")]\$ "
 }
+add-zsh-hook precmd _ichi_git_tools_precmd_ps1
 
 br_merger() {
-  local _def cur
+  local _def cur merge_base
   _def=$(git_default_branch)
   cur=$(br_name)
-  git branch --contains "$(git log "${_def}..HEAD" --merges --author="$(git config user.email)" -n 1 --format="%H^2")" | grep -vF "$cur"
+  merge_base=$(git log "${_def}..HEAD" --merges --author="$(git config user.email)" -n 1 --format="%H^2" 2>/dev/null) || true
+  [[ -n "$merge_base" ]] || return 0
+  if [[ -n "$cur" ]]; then
+    git branch --format='%(refname:short)' --contains "$merge_base" | grep -vFx -- "$cur"
+  else
+    git branch --format='%(refname:short)' --contains "$merge_base"
+  fi
 }
 
 br_parents() {
@@ -124,8 +132,8 @@ br_name_by_issue() {
 
 gco_remote() {
   _igi_require_git_dir || return
-  local BR_NAME=$1
-  echo_execute "git checkout -b $BR_NAME origin/$BR_NAME"
+  local BR_NAME=$1 REMOTE_REF="origin/$BR_NAME"
+  echo_execute "git checkout -b ${(q)BR_NAME} ${(q)REMOTE_REF}"
 }
 
 gbr() {
@@ -140,6 +148,8 @@ gco() {
   git checkout "$BR_NAME"
 }
 
+# 注意: ローカルに存在するが origin に同名ブランチが無いとき、現在ブランチでなければ
+# ローカルブランチを削除する副作用がある（gcb 等の「存在判定」に使われている）。
 br_exists() {
   local BR_NAME=$1
   local current upstream remote_branch
@@ -187,7 +197,7 @@ gcb() {
     return
   fi
   if br_exists "$BR_NAME"; then
-    echo_execute "git checkout $BR_NAME"
+    echo_execute "git checkout ${(q)BR_NAME}"
   elif br_exists_on_remote "$BR_NAME"; then
     confirm_and_execute "Do you want to checkout $BR_NAME from remote?" "gco_remote $BR_NAME"
   else
@@ -203,7 +213,12 @@ greset() {
 
 set_nodenv_file() {
   # .node-versionを20.18.2にする 未来的に数値が変わったり不要になる可能性あり
-  sed -i '' 's/20.19.4/20.18.2/' .node-version
+  [[ -f .node-version ]] || return 0
+  if sed --version >/dev/null 2>&1; then
+    sed -i 's/20.19.4/20.18.2/' .node-version
+  else
+    sed -i '' 's/20.19.4/20.18.2/' .node-version
+  fi
 }
 
 restore_nodenv_file() {
@@ -234,24 +249,12 @@ gci() {
     return 1
   }
   # メッセージに ' や " を含めても安全（eval しない）。改行もそのまま渡せる。
-  print -r -- "git ci -F $tmp"
-  git ci -F "$tmp"
+  print -r -- "git commit -F $tmp"
+  git commit -F "$tmp"
   ret=$?
   rm -f "$tmp"
   restore_nodenv_file
   return ret
-}
-
-# デバグ用（gpush の zparseopts などの確認向け）
-opttest() {
-  echo "$1"
-  if [[ -n ${y_option:-} ]]; then
-    echo "option y is set"
-    echo "$y_option"
-    echo "$1"
-  else
-    echo "option y is not set"
-  fi
 }
 
 gpush() {
@@ -263,16 +266,16 @@ gpush() {
     return 1
   fi
   if [[ -n ${y_option:-} ]]; then
-    echo_execute "git push -u origin $BR_NAME:$BR_NAME"
+    echo_execute "git push -u origin ${(q)BR_NAME}:${(q)BR_NAME}"
   else
-    confirm_and_execute "Are you sure you want to push $BR_NAME ?" "git push -u origin $BR_NAME:$BR_NAME"
+    confirm_and_execute "Are you sure you want to push $BR_NAME ?" "git push -u origin ${(q)BR_NAME}:${(q)BR_NAME}"
   fi
 }
 
 gfetch() {
   _igi_require_git_dir || return
   local BR_NAME=${1:-$(br_name)}
-  echo_execute "git fetch -u origin $BR_NAME:$BR_NAME"
+  echo_execute "git fetch origin ${(q)BR_NAME}:${(q)BR_NAME}"
 }
 
 gmerge() {
@@ -286,16 +289,16 @@ gmerge() {
   _def=$(git_default_branch)
   BR_NAME=${BR_NAME:-$_def}
   if [[ "$BR_NAME" == "$_def" ]]; then
-    echo_execute "gfetch $BR_NAME && git merge --no-ff $BR_NAME"
+    echo_execute "gfetch ${(q)BR_NAME} && git merge --no-ff ${(q)BR_NAME}"
   else
-    confirm_and_execute "are you sure you want to merge $BR_NAME into $(br_name) ? " "gfetch $BR_NAME && git merge --no-ff $BR_NAME"
+    confirm_and_execute "are you sure you want to merge $BR_NAME into $(br_name) ? " "gfetch ${(q)BR_NAME} && git merge --no-ff ${(q)BR_NAME}"
   fi && confirm_and_execute "gpush?" "gpush -y"
 }
 
 gcherry-pick() {
   _igi_require_git_dir || return
   local HASH=$1
-  echo_execute "git cherry-pick -x $HASH"
+  echo_execute "git cherry-pick -x ${(q)HASH}"
 }
 
 pr_url() {
@@ -308,8 +311,15 @@ pr_url() {
   fi
 }
 
+# change_br_name より前に ~/.zshenv で定義していればそちらが優先される
+if ! (( ${+functions[issue_name_by_branch]} )); then
+  issue_name_by_branch() {
+    parse_git_branch | tr '/' '_' | tr -cd '[:alnum:]_-'
+  }
+fi
+
 change_br_name() {
   local BR_NAME_SNAKE=$1 NEW_BR_NAME
   NEW_BR_NAME="$(issue_name_by_branch)_${BR_NAME_SNAKE}"
-  confirm_and_execute "rename branch to $NEW_BR_NAME ?" "git branch -m $NEW_BR_NAME"
+  confirm_and_execute "rename branch to $NEW_BR_NAME ?" "git branch -m ${(q)NEW_BR_NAME}"
 }

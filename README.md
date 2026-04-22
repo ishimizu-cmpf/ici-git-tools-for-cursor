@@ -24,6 +24,10 @@ source /path/to/ichi-git-tools/zsh/git.zsh
 
 この1行で `.git_br_history.sh`（`gbh` 含む）もまとめて読み込みます。4関数をまだ持っていない場合は、同じファイル内に簡単な実装を置くか、`zsh/git.zsh` の先頭コメントを参考にしてください。
 
+**`change_br_name` 用 `issue_name_by_branch`**: `source` より**前**に同名関数を定義するとそれが使われます。未定義の場合は `zsh/git.zsh` 内のデフォルト（`parse_git_branch` を正規化した文字列）が使われます。
+
+**`gci`**: 標準の **`git commit -F`** でメッセージを渡します（グローバル alias の `git ci` には依存しません）。
+
 ### オプション: Cursor / VS Code のターミナルでブランチ名をクリックして checkout
 
 統合ターミナル上で `gbh` の一覧のブランチ名を **cmd+クリック** して同じ `gbh <番号>` を送るには、同梱のローカル拡張を入れます（初回・更新時）。リポジトリのルートで:
