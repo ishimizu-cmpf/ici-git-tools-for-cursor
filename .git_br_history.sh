@@ -10,22 +10,70 @@ br_exists_on_remote() {
 # BR_HISTORY_URI_SCHEME=… で上書き。未指定時は環境で自動: Cursor なら cursor、それ以外（純 VS Code 等）なら vscode。
 # BR_HISTORY_NO_TERMINAL_LINKS=1 / BR_HISTORY_FORCE_TERMINAL_LINKS=1
 # リンクが出ない: settings の terminal.integrated.allowedLinkSchemes に cursor（または vscode）を追加
+#
+# 統合ターミナルで CURSOR_* / VSCODE_IPC_HOOK が付かないことがある。そのときは PPID 列を辿って
+# Cursor.app / Visual Studio Code.app / Linux の code・cursor バイナリパスを見る。
+# $1 に「呼び出しシェルの PPID」を渡すこと。コマンド置換のサブシェル内では $PPID がサブシェルの親
+# （対話シェル自身）になり、辿り始めが一段ずれるため。
+_br_history_process_tree_scheme() {
+  local pid line lc i next
+  pid="${1:-${PPID:-0}}"
+  i=0
+  while [[ "${pid:-0}" -gt 1 ]] && (( i < 24 )); do
+    line=$(ps -p "$pid" -o args= 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+    if [[ -z "$line" ]]; then
+      line=$(ps -p "$pid" -o command= 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+    fi
+    if [[ -n "$line" ]]; then
+      lc=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
+      if [[ "$lc" == *cursor.app* || "$lc" == */cursor/cursor* || "$lc" == *cursor.exe* ]]; then
+        printf cursor
+        return 0
+      fi
+      if [[ "$lc" == *"visual studio code.app"* || "$lc" == *"visual studio code - insiders.app"* || \
+            "$lc" == *vscode.app* || "$lc" == */code/code* ]]; then
+        printf vscode
+        return 0
+      fi
+    fi
+    next=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d '[:space:]')
+    [[ -z "$next" || "$next" == "$pid" ]] && break
+    pid=$next
+    i=$((i + 1))
+  done
+  return 1
+}
+
 _br_history_uri_scheme() {
   if [[ -n "${BR_HISTORY_URI_SCHEME:-}" ]]; then
     printf '%s' "$BR_HISTORY_URI_SCHEME"
     return
   fi
   # TERM_PROGRAM はどちらも vscode になることが多い。Cursor 専用の痕跡で切り分ける。
+  # 新しい Cursor では VSCODE_IPC_HOOK がターミナルに渡らない／パス表記が変わることがあるため
+  # CURSOR_* を先に見る（例: https://github.com/anthropics/claude-code/issues/44466）。
+  if [[ -n "${CURSOR_AGENT:-}" || -n "${CURSOR_CLI:-}" ]]; then
+    printf cursor
+    return
+  fi
   if [[ -n "${CURSOR_TRACE_ID:-}" ]]; then
     printf cursor
     return
   fi
   if [[ -n "${VSCODE_IPC_HOOK:-}" ]]; then
-    if [[ "$VSCODE_IPC_HOOK" == *"Cursor.app"* || "$VSCODE_IPC_HOOK" == *"/Cursor/"* || \
-          "$VSCODE_IPC_HOOK" == *"Programs/cursor/"* || "$VSCODE_IPC_HOOK" == *"Programs\\cursor\\"* ]]; then
+    local _hook_lc
+    _hook_lc=$(printf '%s' "$VSCODE_IPC_HOOK" | tr '[:upper:]' '[:lower:]')
+    if [[ "$_hook_lc" == *cursor.app* || "$_hook_lc" == */cursor/* || \
+          "$_hook_lc" == *programs/cursor/* || "$_hook_lc" == *programs\\cursor\\* ]]; then
       printf cursor
       return
     fi
+  fi
+  local _tree _ppid
+  _ppid=${PPID:-0}
+  if _tree=$(_br_history_process_tree_scheme "$_ppid"); then
+    printf '%s' "$_tree"
+    return
   fi
   printf vscode
 }
@@ -101,8 +149,8 @@ br_history() {
     if [[ "$message" =~ "checkout: moving from" ]]; then
       local target_branch=$(echo "$message" | sed -E 's/.*checkout: moving from [^ ]+ to ([^ ]+).*/\1/')
 
-      # 有効なブランチ名かチェック（HEAD、master、コミットハッシュを除外）
-      if [[ -n "$target_branch" && "$target_branch" != "HEAD" && "$target_branch" != "master" && ! "$target_branch" =~ ^[0-9a-f]{7,40}$ ]]; then
+      # 有効なブランチ名かチェック（HEAD、master、main、コミットハッシュを除外）
+      if [[ -n "$target_branch" && "$target_branch" != "HEAD" && "$target_branch" != "master" && "$target_branch" != "main" && ! "$target_branch" =~ ^[0-9a-f]{7,40}$ ]]; then
         # 連想配列で重複チェック（O(1)）
         if [[ -z "${seen_branches[$target_branch]}" ]]; then
           branch_list+=("$target_branch")
