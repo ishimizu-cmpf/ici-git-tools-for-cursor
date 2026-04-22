@@ -7,8 +7,29 @@ br_exists_on_remote() {
 }
 
 # ターミナルでブランチ名に OSC8 リンク（cmd+クリックで gbh N）。要: このリポジトリの vscode-br-history-uri-handler/install.sh を bash で実行。
-# BR_HISTORY_URI_SCHEME=vscode（純 VS Code）/ BR_HISTORY_NO_TERMINAL_LINKS=1 / BR_HISTORY_FORCE_TERMINAL_LINKS=1
+# BR_HISTORY_URI_SCHEME=… で上書き。未指定時は環境で自動: Cursor なら cursor、それ以外（純 VS Code 等）なら vscode。
+# BR_HISTORY_NO_TERMINAL_LINKS=1 / BR_HISTORY_FORCE_TERMINAL_LINKS=1
 # リンクが出ない: settings の terminal.integrated.allowedLinkSchemes に cursor（または vscode）を追加
+_br_history_uri_scheme() {
+  if [[ -n "${BR_HISTORY_URI_SCHEME:-}" ]]; then
+    printf '%s' "$BR_HISTORY_URI_SCHEME"
+    return
+  fi
+  # TERM_PROGRAM はどちらも vscode になることが多い。Cursor 専用の痕跡で切り分ける。
+  if [[ -n "${CURSOR_TRACE_ID:-}" ]]; then
+    printf cursor
+    return
+  fi
+  if [[ -n "${VSCODE_IPC_HOOK:-}" ]]; then
+    if [[ "$VSCODE_IPC_HOOK" == *"Cursor.app"* || "$VSCODE_IPC_HOOK" == *"/Cursor/"* || \
+          "$VSCODE_IPC_HOOK" == *"Programs/cursor/"* || "$VSCODE_IPC_HOOK" == *"Programs\\cursor\\"* ]]; then
+      printf cursor
+      return
+    fi
+  fi
+  printf vscode
+}
+
 _br_history_print_branch_link() {
   local n="$1"
   local label="$2"
@@ -30,7 +51,8 @@ _br_history_print_branch_link() {
     return
   fi
 
-  local scheme="${BR_HISTORY_URI_SCHEME:-cursor}"
+  local scheme
+  scheme="$(_br_history_uri_scheme)"
   printf '\033]8;;%s://local.terminal-link/gbh?n=%s\033\\%s\033]8;;\033\\' "$scheme" "$n" "$label"
 }
 
