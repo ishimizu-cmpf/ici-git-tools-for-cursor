@@ -212,16 +212,34 @@ restore_nodenv_file() {
 
 gci() {
   _igi_require_git_dir || return
-  local BR_NAME COMMIT_MESSAGE
+  local BR_NAME COMMIT_MESSAGE tmp ret
   BR_NAME=$(br_name)
   COMMIT_MESSAGE=$1
   if [[ $BR_NAME == (master|main|production|staging) ]]; then
     echo "$BR_NAME is not allowed to commit locally"
     return 1
   fi
+  if [[ -z "$COMMIT_MESSAGE" ]]; then
+    echo "usage: gci <commit message>"
+    return 1
+  fi
   set_nodenv_file
-  echo_execute "git ci -m '$COMMIT_MESSAGE'"
+  tmp=$(mktemp "${TMPDIR:-/tmp}/ichi-gci.XXXXXX") || {
+    restore_nodenv_file
+    return 1
+  }
+  print -r -- "$COMMIT_MESSAGE" >"$tmp" || {
+    rm -f "$tmp"
+    restore_nodenv_file
+    return 1
+  }
+  # メッセージに ' や " を含めても安全（eval しない）。改行もそのまま渡せる。
+  print -r -- "git ci -F $tmp"
+  git ci -F "$tmp"
+  ret=$?
+  rm -f "$tmp"
   restore_nodenv_file
+  return ret
 }
 
 # デバグ用（gpush の zparseopts などの確認向け）
